@@ -33,6 +33,12 @@ export async function llamar(conexion, accion, datos = {}) {
       signal: corte.signal,
     });
   } catch {
+    // Con internet, un fallo acá suele ser el script mal publicado: Google responde con su pantalla de login,
+    // que el navegador bloquea (CORS) igual que una falta de red
+    if (navigator.onLine && !corte.signal.aborted) {
+      throw new SinConexion("No pude comunicarme con el script del Excel. Avisale a quien administra la planilla: " +
+        "tiene que estar implementado como Aplicación web, ejecutando como \"Yo\" y con acceso \"Cualquier persona\".");
+    }
     throw new SinConexion("No hay conexión con el Excel. Revisá la señal y probá de nuevo: lo cargado no se pierde.");
   } finally {
     clearTimeout(reloj);
