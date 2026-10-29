@@ -15,7 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from excel_writer import (FilaNueva, analizar_libro, campo_canonico, guardar_filas,
-                          transportista_corto, ETIQUETAS)
+                          transportista_nombre, ETIQUETAS)
 from extractor import leer_cpe
 
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -172,7 +172,7 @@ for archivo in archivos:
         d1, d2, d3 = st.columns(3)
         patente = d1.text_input("Patente", value=cpe.patente, key=f"pat_{uid}")
         fecha = d2.date_input("Fecha", value=cpe.fecha or date.today(), format="DD/MM/YYYY", key=f"fec_{uid}")
-        transp = d3.text_input("Transportista", value=transportista_corto(cpe.transportista, cpe.transportista_cuit),
+        transp = d3.text_input("Transportista", value=transportista_nombre(cpe.transportista),
                                key=f"tr_{uid}")
         if hoja.faltantes and not agregar_cols:
             st.caption("ℹ️ Esta hoja no tiene columna: " + ", ".join(ETIQUETAS[f] for f in hoja.faltantes)

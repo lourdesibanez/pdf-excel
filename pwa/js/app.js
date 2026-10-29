@@ -2,7 +2,7 @@
 // se mandan al Excel compartido (Google Sheets), que solo las agrega al final.
 import * as pdfjs from "../vendor/pdf.min.mjs";
 import { leerCpe } from "./extractor.js";
-import { analizarHojas, campoCanonico, transportistaCorto, ETIQUETAS } from "./libro.js";
+import { analizarHojas, campoCanonico, transportistaNombre, ETIQUETAS } from "./libro.js";
 import { leerCodigo, llamar, SinConexion } from "./api.js";
 import * as store from "./store.js";
 
@@ -163,7 +163,7 @@ function nuevaTarjeta(cpe) {
   const t = {
     id: siguienteId++, cpe, forzar: false, okDif: false,
     patente: cpe.patente, fecha: cpe.fecha || hoyIso(),
-    transportista: transportistaCorto(cpe.transportista, cpe.transportistaCuit),
+    transportista: transportistaNombre(cpe.transportista),
     lotes: [{ lote: "", kgs: cpe.pesoNeto || 0 }],
   };
   aplicarHoja(t, estado.libro.sugerirHoja(cpe.grano, cpe.ctg));

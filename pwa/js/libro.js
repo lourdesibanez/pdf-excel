@@ -10,7 +10,7 @@ const GRANOS = ["maiz", "soja", "girasol", "trigo", "sorgo", "cebada"];
 
 export function normalizar(texto) {
   return String(texto ?? "")
-    .normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^\x00-\x7f]/g, "")
+    .normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x00-\x7f]/g, "")
     .toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
@@ -112,8 +112,7 @@ function titulo(texto) {
   return texto.toLowerCase().replace(/(^|[\s.-])(\p{L})/gu, (_, sep, letra) => sep + letra.toUpperCase());
 }
 
-// En las planillas usan el apellido ('Barbesini'). Persona física (CUIT 20/23/24/27) -> apellido.
-export function transportistaCorto(nombre, cuit = "") {
-  if (["20", "23", "24", "27"].includes(cuit.slice(0, 2)) && nombre) return titulo(nombre.split(/\s+/)[0]);
-  return titulo(nombre || "");
+// Nombre completo del transportista, como figura en la CPE: 'BARBESINI CLAUDIO OSCAR' -> 'Barbesini Claudio Oscar'
+export function transportistaNombre(nombre) {
+  return titulo(String(nombre || "").trim().replace(/\s+/g, " "));
 }

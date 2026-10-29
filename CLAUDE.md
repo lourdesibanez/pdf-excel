@@ -16,7 +16,7 @@ PWA (iPhone/Android) que lee PDFs de Cartas de Porte Electrónicas (CPE) de ARCA
 - El PDF NO trae el lote: siempre lo ingresa el usuario. Una CPE puede repartirse en varios lotes (una fila por lote, mismo CTG/CPE).
 - El campo de origen viene en "Observaciones" del PDF.
 - Maíz (tardío vs flint) y soja (1ra vs 2da) no se distinguen en el PDF: se sugiere la hoja y el usuario confirma.
-- Transportista: en las planillas se usa el apellido ("Barbesini"); para persona física (CUIT 20/23/24/27) se toma la primera palabra.
+- Transportista: nombre completo como figura en la CPE, en formato título ("Barbesini Claudio Oscar"). El usuario lo puede editar antes de guardar.
 - El CTG se escribe como número o texto según lo que predomine en la hoja; el CPE siempre como texto `00001-00026528`.
 - Fechas: viajan como texto ISO `YYYY-MM-DD`; el script las escribe al mediodía para que ninguna zona horaria cambie el día.
 

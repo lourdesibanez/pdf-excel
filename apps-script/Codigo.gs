@@ -63,7 +63,7 @@ function doPost(e) {
 
 function normalizar_(texto) {
   return String(texto == null ? '' : texto)
-    .normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^\x00-\x7f]/g, '')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x00-\x7f]/g, '')
     .toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 

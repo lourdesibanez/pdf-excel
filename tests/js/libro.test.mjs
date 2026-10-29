@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { analizarHojas, campoCanonico, transportistaCorto } from "../../pwa/js/libro.js";
+import { analizarHojas, campoCanonico, transportistaNombre } from "../../pwa/js/libro.js";
 import { leerCodigo } from "../../pwa/js/api.js";
 import { HojaFalsa, cargarScript } from "./sheets-falso.mjs";
 
@@ -39,8 +39,9 @@ test("campo y transportista", () => {
   assert.equal(campoCanonico("FORTIN PAUNERO", ["Fortin Paunero"]), "Fortin Paunero");
   assert.equal(campoCanonico("Paunero", ["Fortin Paunero"]), "Fortin Paunero");
   assert.equal(campoCanonico("Otro campo ", ["Fortin Paunero"]), "Otro campo");
-  assert.equal(transportistaCorto("BARBESINI CLAUDIO OSCAR", "20237684436"), "Barbesini");
-  assert.equal(transportistaCorto("WILLIAMS ENTREGAS SA", "30707386076"), "Williams Entregas Sa");
+  assert.equal(transportistaNombre("BARBESINI CLAUDIO OSCAR"), "Barbesini Claudio Oscar");
+  assert.equal(transportistaNombre("WILLIAMS  ENTREGAS SA "), "Williams Entregas Sa");
+  assert.equal(transportistaNombre(""), "");
 });
 
 test("código de conexión: acepta el código o el link, con tildes", () => {

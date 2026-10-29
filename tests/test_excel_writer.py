@@ -26,7 +26,7 @@ def libro_ejemplo() -> bytes:
 def fila(lote: str, kgs: int) -> FilaNueva:
     return FilaNueva(hoja="CPE Maiz Tard.", cultivo="Maiz Tardio", campo="Fortin Paunero", lote=lote, kgs=kgs,
                      ctg="10134300029", cpe="00001-00026528", patente="HDE283", fecha=date(2026, 8, 11),
-                     transportista="Barbesini")
+                     transportista="Barbesini Claudio Oscar")
 
 
 def test_analizar_desde_bytes():

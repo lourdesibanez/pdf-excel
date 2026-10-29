@@ -184,11 +184,9 @@ def campo_canonico(texto: str, conocidos: list[str]) -> str:
     return texto.strip()
 
 
-def transportista_corto(nombre: str, cuit: str = "") -> str:
-    """En tus planillas usan el apellido ('Barbesini'). Persona física (CUIT 20/23/24/27) -> apellido."""
-    if cuit[:2] in {"20", "23", "24", "27"} and nombre:
-        return nombre.split()[0].title()
-    return nombre.title()
+def transportista_nombre(nombre: str) -> str:
+    """Nombre completo, como figura en la CPE: 'BARBESINI CLAUDIO OSCAR' -> 'Barbesini Claudio Oscar'."""
+    return " ".join((nombre or "").split()).title()
 
 
 def _valor_lote(lote: str):

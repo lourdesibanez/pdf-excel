@@ -23,7 +23,7 @@ function planilla() {
 
 const fila = (lote, kgs, extra = {}) => ({
   hoja: "CPE Maiz Tard.", cultivo: "Maiz Tardio", campo: "Fortin Paunero", lote, kgs, ctg: "10134300029",
-  cpe: "00001-00026528", patente: "HDE283", fecha: "2026-08-11", transportista: "Barbesini", ...extra,
+  cpe: "00001-00026528", patente: "HDE283", fecha: "2026-08-11", transportista: "Barbesini Claudio Oscar", ...extra,
 });
 
 test("rechaza claves inválidas", () => {
