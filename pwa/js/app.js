@@ -1,27 +1,31 @@
-// CPE → Excel (PWA). Todo corre en el teléfono: el PDF y el Excel nunca salen de acá.
+// CPE → Excel (PWA). El PDF se lee en el teléfono (funciona sin señal); al guardar, las filas
+// se mandan al Excel compartido (Google Sheets), que solo las agrega al final.
 import * as pdfjs from "../vendor/pdf.min.mjs";
 import { leerCpe } from "./extractor.js";
-import { analizarLibro, guardarFilas, campoCanonico, transportistaCorto, ETIQUETAS } from "./excel.js";
+import { analizarHojas, campoCanonico, transportistaCorto, ETIQUETAS } from "./libro.js";
+import { leerCodigo, llamar, SinConexion } from "./api.js";
 import * as store from "./store.js";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("../vendor/pdf.worker.min.mjs", import.meta.url).href;
 
-const MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const ICONOS = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   mas: '<path d="M12 5v14M5 12h14"/>',
-  compartir: '<path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/>',
-  archivo: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  hoja: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/>',
+  actualizar: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
   alerta: '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
   ok: '<path d="M20 6L9 17l-5-5"/>',
+  sinSenal: '<path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2.3-1.6M2 8.8a15 15 0 0 1 4.2-2.6M22 8.8A15 15 0 0 0 11 4.1"/><path d="M12 20h.01"/>',
 };
 
 const estado = {
-  excel: null,        // {nombre, bytes, cambios}: el Excel de trabajo, guardado en el teléfono
-  libro: null,        // análisis del Excel (hojas, CTG cargados...)
-  tarjetas: [],       // una por PDF de CPE pendiente de cargar
+  conexion: null,     // {url, clave, nombre}: el script de la planilla y la clave de esta persona
+  datosLibro: null,   // última lectura del Excel: {archivo, usuario, hojas, leido}. Se guarda para usar sin señal
+  libro: null,        // análisis de datosLibro (hojas, CTG cargados...)
+  sinSenal: false,
+  tarjetas: [],       // una por PDF de CPE pendiente de guardar (se guardan en el teléfono)
   agregarCols: false,
-  resultado: null,    // último "Agregar al Excel"
+  resultado: null,    // último guardado
 };
 let siguienteId = 1;
 
@@ -56,6 +60,12 @@ const fmtKg = (n) => (n === null || n === undefined ? "—" : n.toLocaleString("
 const fmtFecha = (iso) => (iso ? iso.split("-").reverse().join("/") : "—");
 const hoyIso = () => new Date().toLocaleDateString("sv-SE"); // YYYY-MM-DD local
 
+function fmtMomento(ms) {
+  const d = new Date(ms);
+  const hora = d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? `hoy ${hora}` : `${d.toLocaleDateString("es-AR")} ${hora}`;
+}
+
 function campoForm(etiqueta, control, clase = "") {
   return h("label", { class: `campo ${clase}` }, h("span", { class: "etiqueta" }, etiqueta), control);
 }
@@ -63,7 +73,7 @@ function campoForm(etiqueta, control, clase = "") {
 // ---------- avisos y espera ----------
 function mostrarError(mensaje) {
   const aviso = document.getElementById("aviso");
-  poner(aviso, 
+  poner(aviso,
     icono("alerta"),
     h("p", {}, mensaje),
     h("button", { type: "button", class: "boton-icono", "aria-label": "Cerrar aviso", onclick: () => { aviso.hidden = true; } }, icono("x")),
@@ -80,7 +90,8 @@ async function conEspera(mensaje, tarea) {
   try {
     await tarea();
   } catch (e) {
-    console.error(e);
+    if (e instanceof SinConexion) estado.sinSenal = true;
+    else console.error(e);
     mostrarError(e.message || String(e));
   } finally {
     espera.hidden = true;
@@ -88,59 +99,59 @@ async function conEspera(mensaje, tarea) {
   }
 }
 
-// ---------- Excel ----------
-async function usarExcel(excel) {
-  const libro = await analizarLibro(excel.bytes);
-  if (!Object.keys(libro.hojas).length) {
-    throw new Error("No encontré hojas de CPE en ese Excel (hojas con columnas 'CTG' y 'CPE' en la fila 1).");
+// ---------- conexión con el Excel compartido ----------
+async function aplicarDatosLibro(datos) {
+  estado.datosLibro = { archivo: datos.archivo, usuario: datos.usuario, hojas: datos.hojas, leido: Date.now() };
+  estado.libro = analizarHojas(datos.hojas);
+  estado.sinSenal = false;
+  if (!Object.keys(estado.libro.hojas).length) {
+    throw new Error("El Excel no tiene hojas de CPE (hojas con columnas 'CTG' y 'CPE' en la fila 1).");
   }
-  estado.excel = excel;
-  estado.libro = libro;
-  for (const t of estado.tarjetas) aplicarHoja(t, libro.sugerirHoja(t.cpe.grano, t.cpe.ctg));
+  for (const t of estado.tarjetas) {
+    if (!estado.libro.hojas[t.hoja]) aplicarHoja(t, estado.libro.sugerirHoja(t.cpe.grano, t.cpe.ctg));
+  }
+  await store.guardar("libro", estado.datosLibro);
 }
 
-function alElegirExcel(ev) {
-  const archivo = ev.target.files[0];
-  ev.target.value = "";
-  if (!archivo) return;
-  const pendientes = estado.excel?.cambios || 0;
-  if (pendientes && !confirm(`Tenés ${pendientes} fila(s) agregadas que todavía no exportaste. Si cambiás de Excel se pierden. ¿Seguir?`)) return;
-  conEspera("Leyendo el Excel…", async () => {
-    await usarExcel({ nombre: archivo.name, bytes: new Uint8Array(await archivo.arrayBuffer()), cambios: 0 });
-    estado.resultado = null;
-    await store.guardar("excel", estado.excel);
+function conectar(texto) {
+  conEspera("Conectando con el Excel…", async () => {
+    const conexion = leerCodigo(texto);
+    const r = await llamar(conexion, "libro");
+    if (!r.ok) throw new Error(r.error);
+    await aplicarDatosLibro(r);
+    estado.conexion = { ...conexion, nombre: r.usuario };
+    await store.guardar("conexion", estado.conexion);
+    if (location.hash) history.replaceState(null, "", location.pathname + location.search);
   });
 }
 
-async function exportar() {
-  const { nombre, bytes } = estado.excel;
-  const archivo = new File([bytes], nombre, { type: MIME_XLSX });
-  const tactil = matchMedia("(pointer: coarse)").matches;
-  if (tactil && navigator.canShare?.({ files: [archivo] })) {
-    try {
-      await navigator.share({ files: [archivo] }); // iPhone: "Guardar en Archivos", WhatsApp, Mail...
-    } catch (e) {
-      if (e.name === "AbortError") return;
-      descargar(archivo);
-    }
-  } else {
-    descargar(archivo);
+async function actualizarLibro({ silencioso = false } = {}) {
+  if (!estado.conexion) return;
+  const tarea = async () => {
+    const r = await llamar(estado.conexion, "libro");
+    if (!r.ok) throw new Error(r.error);
+    await aplicarDatosLibro(r);
+  };
+  if (!silencioso) return conEspera("Leyendo el Excel…", tarea);
+  try {
+    await tarea();
+  } catch (e) {
+    if (e instanceof SinConexion) estado.sinSenal = true;
+    else mostrarError(e.message || String(e));
   }
-  estado.excel.cambios = 0;
-  await store.guardar("excel", estado.excel);
   render();
 }
 
-function descargar(archivo) {
-  const url = URL.createObjectURL(archivo);
-  const a = h("a", { href: url, download: archivo.name });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+function desconectar() {
+  const pendientes = estado.tarjetas.length;
+  const aviso = pendientes ? ` Se descartan ${pendientes} carta(s) sin guardar.` : "";
+  if (!confirm(`¿Desconectar este teléfono del Excel? Para volver a conectarlo vas a necesitar el código.${aviso}`)) return;
+  Object.assign(estado, { conexion: null, datosLibro: null, libro: null, tarjetas: [], resultado: null });
+  Promise.all(["conexion", "libro", "tarjetas"].map(store.borrar)).catch(console.error);
+  render();
 }
 
-// ---------- PDFs ----------
+// ---------- cartas de porte ----------
 function aplicarHoja(t, nombre) {
   const hoja = estado.libro.hojas[nombre] || Object.values(estado.libro.hojas)[0];
   t.hoja = hoja.nombre;
@@ -157,6 +168,14 @@ function nuevaTarjeta(cpe) {
   };
   aplicarHoja(t, estado.libro.sugerirHoja(cpe.grano, cpe.ctg));
   return t;
+}
+
+let reloj;
+function guardarTarjetas() {
+  clearTimeout(reloj);
+  reloj = setTimeout(() => {
+    store.guardar("tarjetas", estado.tarjetas.map(({ el, ...t }) => t)).catch(console.error);
+  }, 300);
 }
 
 function alElegirPdfs(ev) {
@@ -178,7 +197,7 @@ function alElegirPdfs(ev) {
   });
 }
 
-// ---------- validación ----------
+// ---------- validación y guardado ----------
 function analizarTarjetas() {
   const vistos = new Map();
   return estado.tarjetas.map((t) => {
@@ -204,56 +223,62 @@ function filasParaGuardar() {
   })));
 }
 
-function agregarAlExcel() {
-  conEspera("Agregando al Excel…", async () => {
-    const res = await guardarFilas(estado.excel.bytes, filasParaGuardar(), estado.agregarCols);
-    const excel = { ...estado.excel, bytes: res.contenido, cambios: estado.excel.cambios + res.filas.length };
-    await usarExcel(excel);
-    await store.guardar("excel", excel);
+function guardarEnExcel() {
+  conEspera("Guardando en el Excel…", async () => {
+    const r = await llamar(estado.conexion, "agregar", {
+      filas: filasParaGuardar(),
+      forzar: estado.tarjetas.filter((t) => t.forzar).map((t) => t.cpe.ctg),
+      agregarColumnas: estado.agregarCols,
+    });
+    // El script siempre devuelve el Excel como quedó: así los duplicados nuevos se ven en las tarjetas
+    if (r.hojas) await aplicarDatosLibro({ ...estado.datosLibro, hojas: r.hojas });
+    if (!r.ok) throw new Error(r.error);
     estado.tarjetas = [];
-    estado.resultado = res;
+    estado.resultado = r;
+    guardarTarjetas();
     scrollTo({ top: 0, behavior: "smooth" });
   });
 }
 
 // ---------- render ----------
 function render() {
-  renderExcel();
+  renderConexion();
   renderResultado();
   renderTarjetas();
+  if (estado.conexion) guardarTarjetas();
 }
 
-function renderExcel() {
+function renderConexion() {
   const panel = document.getElementById("panel-excel");
-  const selector = h("input", {
-    type: "file", id: "input-excel", class: "oculto-visual",
-    accept: `.xlsx,${MIME_XLSX}`, onchange: alElegirExcel,
-  });
-  if (!estado.excel) {
-    poner(panel, 
-      h("h2", {}, "1. Tu Excel de avance de cosecha"),
-      h("p", { class: "ayuda" }, "Elegilo una vez: queda guardado en este teléfono y las cartas de porte se van agregando ahí. Los datos no salen del teléfono."),
-      selector,
-      h("label", { for: "input-excel", class: "boton primario grande" }, icono("archivo"), "Elegir Excel (.xlsx)"),
+  if (!estado.conexion) {
+    const codigo = h("textarea", {
+      id: "codigo", rows: 4, autocomplete: "off", autocapitalize: "off", spellcheck: false,
+      placeholder: "Pegá acá el código de conexión",
+    });
+    poner(panel,
+      h("h2", {}, "Conectar con el Excel"),
+      h("p", { class: "ayuda" }, "Pedile el código de conexión a quien administra la planilla (te lo puede mandar por WhatsApp) y pegalo acá. Se hace una sola vez en este teléfono."),
+      campoForm("Código de conexión", codigo),
+      h("button", { type: "button", class: "boton primario grande", onclick: () => conectar(codigo.value) }, "Conectar"),
     );
     return;
   }
-  const { nombre, cambios } = estado.excel;
-  poner(panel, 
+  const { archivo, usuario, leido } = estado.datosLibro || {};
+  poner(panel,
     h("div", { class: "excel-cabecera" },
-      icono("archivo"),
+      icono("hoja"),
       h("div", {},
-        h("p", { class: "excel-nombre" }, nombre),
-        h("p", { class: "ayuda" }, "Hojas de CPE: " + Object.keys(estado.libro.hojas).join(" · ")),
+        h("p", { class: "excel-nombre" }, archivo || "Excel compartido"),
+        h("p", { class: "ayuda" }, `Conectado como ${usuario || estado.conexion.nombre}`),
+        leido ? h("p", { class: "ayuda" }, `Datos del Excel: ${fmtMomento(leido)}`) : null,
       ),
     ),
-    cambios
-      ? h("p", { class: "pendiente" }, `${cambios} fila(s) agregadas sin exportar`)
+    estado.sinSenal
+      ? h("p", { class: "senal" }, icono("sinSenal"), "Sin señal. Podés leer PDFs y completar los lotes; para guardar hace falta conexión.")
       : null,
     h("div", { class: "acciones" },
-      h("button", { type: "button", class: `boton ${cambios ? "primario" : ""}`, onclick: exportar }, icono("compartir"), "Exportar"),
-      selector,
-      h("label", { for: "input-excel", class: "boton" }, "Cambiar Excel"),
+      h("button", { type: "button", class: "boton", onclick: () => actualizarLibro() }, icono("actualizar"), "Actualizar"),
+      h("button", { type: "button", class: "boton", onclick: desconectar }, "Desconectar"),
     ),
     h("label", { class: "check" },
       h("input", {
@@ -274,25 +299,23 @@ function renderResultado() {
   const res = estado.resultado;
   panel.hidden = !res;
   if (!res) return;
-  poner(panel, 
-    h("p", { class: "titulo-ok" }, icono("ok"), `Listo: se agregaron ${res.filas.length} fila(s)`),
+  poner(panel,
+    h("p", { class: "titulo-ok" }, icono("ok"), `Guardado: ${res.filas.length} fila(s) agregadas al Excel`),
     h("p", { class: "ayuda" }, res.filas.map(([hoja, fila]) => `${hoja} fila ${fila}`).join(" · ")),
     res.avisos.map((a) => h("p", { class: "ayuda" }, a)),
-    h("p", { class: "ayuda" }, "Cuando termines, tocá Exportar para guardarlo en Archivos o mandarlo."),
   );
 }
 
 function renderTarjetas() {
   const zona = document.getElementById("zona-pdfs");
-  const pie = document.getElementById("pie");
-  if (!estado.excel) {
+  if (!estado.conexion || !estado.libro) {
     poner(zona);
-    pie.hidden = true;
+    renderPie([]);
     return;
   }
   const infos = analizarTarjetas();
-  poner(zona, 
-    h("h2", {}, "2. Cartas de porte"),
+  poner(zona,
+    h("h2", {}, "Cartas de porte"),
     h("input", { type: "file", id: "input-pdf", class: "oculto-visual", accept: "application/pdf,.pdf", multiple: true, onchange: alElegirPdfs }),
     h("label", { for: "input-pdf", class: `boton grande ${estado.tarjetas.length ? "" : "primario"}` }, icono("mas"), "Agregar PDFs de CPE"),
     infos.map(renderTarjeta),
@@ -304,6 +327,7 @@ function refrescar() {
   const infos = analizarTarjetas();
   for (const info of infos) actualizarEstadoTarjeta(info);
   renderPie(infos);
+  guardarTarjetas();
 }
 
 function renderPie(infos) {
@@ -312,10 +336,10 @@ function renderPie(infos) {
   if (!infos.length) return;
   const conProblemas = infos.filter((i) => i.problemas.length).length;
   const filas = infos.reduce((n, i) => n + i.t.lotes.length, 0);
-  poner(pie, 
+  poner(pie,
     h("p", { class: conProblemas ? "pie-error" : "" },
-      conProblemas ? `Revisá ${conProblemas} carta(s) marcadas en rojo` : `${filas} fila(s) listas para agregar`),
-    h("button", { type: "button", class: "boton primario", disabled: conProblemas > 0, onclick: agregarAlExcel }, "Agregar al Excel"),
+      conProblemas ? `Revisá ${conProblemas} carta(s) marcadas en rojo` : `${filas} fila(s) listas para guardar`),
+    h("button", { type: "button", class: "boton primario", disabled: conProblemas > 0, onclick: guardarEnExcel }, "Guardar en el Excel"),
   );
 }
 
@@ -414,12 +438,12 @@ function renderTarjeta(info) {
 function actualizarEstadoTarjeta({ t, suma, neto, problemas }) {
   const hoja = estado.libro.hojas[t.hoja];
   const conocidos = hoja.lotesPorCampo[campoCanonico(t.campo, hoja.campos)] || [];
-  poner(t.el.lotesConocidos, ...conocidos.slice(0, 30).map((l) => h("option", { value: l })));
+  poner(t.el.lotesConocidos, conocidos.slice(0, 30).map((l) => h("option", { value: l })));
 
   if (suma === neto) {
     poner(t.el.estado, h("p", { class: "ok" }, icono("ok"), `Suma ${fmtKg(suma)} kg = neto de la CPE`));
   } else {
-    poner(t.el.estado, 
+    poner(t.el.estado,
       h("p", { class: "advertencia" }, `La suma de lotes (${fmtKg(suma)} kg) no coincide con el neto (${fmtKg(neto)} kg). Diferencia: ${fmtKg(neto - suma)} kg`),
       h("label", { class: "check" },
         h("input", { type: "checkbox", checked: t.okDif, onchange: (e) => { t.okDif = e.target.checked; refrescar(); } }),
@@ -449,15 +473,31 @@ async function iniciar() {
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(console.error);
   navigator.storage?.persist?.().catch(() => {});
   consejoInstalar();
+  addEventListener("online", () => actualizarLibro({ silencioso: true }));
+  addEventListener("offline", () => { estado.sinSenal = true; render(); });
+
   try {
     estado.agregarCols = !!(await store.leer("prefs"))?.agregarCols;
-    const excel = await store.leer("excel");
-    if (excel) await usarExcel(excel);
+    estado.conexion = (await store.leer("conexion")) || null;
+    const datos = await store.leer("libro");
+    if (estado.conexion && datos) {
+      estado.datosLibro = datos;
+      estado.libro = analizarHojas(datos.hojas);
+      estado.tarjetas = (await store.leer("tarjetas")) || [];
+      siguienteId = Math.max(0, ...estado.tarjetas.map((t) => t.id)) + 1;
+    }
   } catch (e) {
     console.error(e);
-    mostrarError("No pude abrir el Excel guardado: " + (e.message || e) + ". Elegilo de nuevo.");
+    mostrarError("No pude leer lo guardado en el teléfono: " + (e.message || e));
+  }
+
+  // Link de conexión (…#conectar=CODIGO) abierto en el teléfono
+  if (location.hash.includes("conectar=") && !estado.conexion) {
+    conectar(location.hash);
+    return;
   }
   render();
+  if (estado.conexion) actualizarLibro({ silencioso: true });
 }
 
 iniciar();

@@ -1,7 +1,7 @@
 {
   "name": "Cartas de Porte → Excel",
   "short_name": "CPE Excel",
-  "description": "Cargá Cartas de Porte Electrónicas (PDF de ARCA) en tu Excel de avance de cosecha.",
+  "description": "Cargá Cartas de Porte Electrónicas (PDF de ARCA) en el Excel compartido de avance de cosecha.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",

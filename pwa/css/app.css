@@ -156,6 +156,19 @@ p { margin: 0; }
   padding: 4px 12px;
 }
 
+textarea { resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 16px; word-break: break-all; }
+
+.senal {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: var(--advertencia-fondo);
+  color: var(--advertencia);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+}
+
 .resultado { border-color: var(--ok); }
 .titulo-ok { display: flex; gap: 8px; align-items: center; font-weight: 650; color: var(--ok); }
 
@@ -169,7 +182,7 @@ p { margin: 0; }
 .campo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .etiqueta { font-size: 13px; font-weight: 600; color: var(--tinta-suave); }
 
-input[type="text"], input[type="date"], select {
+input[type="text"], input[type="date"], select, textarea {
   width: 100%;
   min-height: 44px;
   padding: 10px 12px;
