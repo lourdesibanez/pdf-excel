@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+.streamlit/secrets.toml
+config.json
+backups/
+# Nunca subir datos reales al repositorio (el repo de GitHub Pages es público)
+*.xlsx
+*.xls
+ejemplos/

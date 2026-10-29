@@ -1,0 +1,6 @@
+[server]
+# Tamaño máximo por archivo subido (MB)
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false

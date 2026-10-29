@@ -1,0 +1,16 @@
+{
+  "name": "Cartas de Porte → Excel",
+  "short_name": "CPE Excel",
+  "description": "Cargá Cartas de Porte Electrónicas (PDF de ARCA) en tu Excel de avance de cosecha.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f3ee",
+  "theme_color": "#2f6b3a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

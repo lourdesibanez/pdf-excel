@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>CPE → Excel</title>
+  <meta name="description" content="Cargá Cartas de Porte Electrónicas (PDF de ARCA) en tu Excel de avance de cosecha, desde el celular y sin internet.">
+  <meta name="theme-color" content="#2f6b3a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CPE Excel">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="vendor/exceljs.min.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <header class="barra">
+    <h1>Cartas de Porte → Excel</h1>
+  </header>
+
+  <main>
+    <div id="consejo" class="consejo" hidden>
+      <p>Para instalarla: tocá <strong>Compartir</strong> en Safari y después <strong>Agregar a inicio</strong>. Así funciona sin internet.</p>
+      <button type="button" class="boton chico">Entendido</button>
+    </div>
+
+    <div id="aviso" class="aviso" role="alert" hidden></div>
+
+    <section id="panel-excel" class="panel" aria-live="polite">
+      <p class="ayuda">Cargando…</p>
+    </section>
+
+    <section id="resultado" class="panel resultado" aria-live="polite" hidden></section>
+
+    <section id="zona-pdfs" class="zona-pdfs"></section>
+  </main>
+
+  <footer id="pie" class="pie" hidden></footer>
+
+  <div id="espera" class="espera" role="status" hidden>
+    <div class="spinner" aria-hidden="true"></div>
+    <p>Procesando…</p>
+  </div>
+</body>
+</html>

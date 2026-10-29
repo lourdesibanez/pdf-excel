@@ -1,0 +1,16 @@
+{
+  "name": "cpe-a-excel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PWA: Cartas de Porte (PDF) -> Excel de avance de cosecha",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.mjs\"",
+    "vendor": "node scripts/vendor.mjs",
+    "serve": "npx --yes http-server pwa -p 8080 -c-1"
+  },
+  "devDependencies": {
+    "exceljs": "^4.4.0",
+    "pdfjs-dist": "^4.10.38"
+  }
+}
