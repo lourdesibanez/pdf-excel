@@ -1,7 +1,7 @@
 // CPE → Excel (PWA). El PDF se lee en el teléfono (funciona sin señal); al guardar, las filas
 // se mandan al Excel compartido (Google Sheets), que solo las agrega al final.
 import * as pdfjs from "../vendor/pdf.min.mjs";
-import { leerCpe } from "./extractor.js";
+import { leerCpe, parsearTexto } from "./extractor.js";
 import { analizarHojas, campoCanonico, transportistaNombre, ETIQUETAS } from "./libro.js";
 import { leerCodigo, llamar, SinConexion } from "./api.js";
 import * as store from "./store.js";
@@ -26,6 +26,7 @@ const estado = {
   tarjetas: [],       // una por PDF de CPE pendiente de guardar (se guardan en el teléfono)
   agregarCols: false,
   resultado: null,    // último guardado
+  recibidasNuevas: 0, // cartas que acaban de llegar por WhatsApp (para el aviso)
 };
 let siguienteId = 1;
 
@@ -121,6 +122,7 @@ function conectar(texto) {
     await aplicarDatosLibro(r);
     estado.conexion = { ...conexion, nombre: r.usuario };
     await store.guardar("conexion", estado.conexion);
+    await traerRecibidas();
     if (location.hash) history.replaceState(null, "", location.pathname + location.search);
   });
 }
@@ -131,6 +133,7 @@ async function actualizarLibro({ silencioso = false } = {}) {
     const r = await llamar(estado.conexion, "libro");
     if (!r.ok) throw new Error(r.error);
     await aplicarDatosLibro(r);
+    await traerRecibidas();
   };
   if (!silencioso) return conEspera("Leyendo el Excel…", tarea);
   try {
@@ -149,6 +152,40 @@ function desconectar() {
   Object.assign(estado, { conexion: null, datosLibro: null, libro: null, tarjetas: [], resultado: null });
   Promise.all(["conexion", "libro", "tarjetas"].map(store.borrar)).catch(console.error);
   render();
+}
+
+// ---------- cartas recibidas por WhatsApp (Atajo "Mandar a CPE") ----------
+const base64ABytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+// Trae los PDFs que esta persona mandó desde WhatsApp y que todavía no tienen tarjeta
+async function traerRecibidas() {
+  const r = await llamar(estado.conexion, "pendientes");
+  if (!r.ok) throw new Error(r.error);
+  // La bandeja del servidor manda: si un PDF recibido ya no está pendiente (se cargó o descartó), su tarjeta se va
+  const enBandeja = new Set(r.recibidas.map((rec) => rec.id));
+  estado.tarjetas = estado.tarjetas.filter((t) => !t.recibidoId || enBandeja.has(t.recibidoId));
+  const conocidas = new Set(estado.tarjetas.map((t) => t.recibidoId).filter(Boolean));
+  let nuevas = 0;
+  for (const rec of r.recibidas) {
+    if (conocidas.has(rec.id)) continue;
+    let cpe;
+    try {
+      cpe = await leerCpe(base64ABytes(rec.pdf), pdfjs, rec.nombre);
+    } catch {
+      // PDF dañado: igual se muestra, para que se pueda descartar desde la app
+      cpe = parsearTexto("", rec.nombre);
+      cpe.advertencias.unshift("No pude leer este PDF. Descartalo y mandalo de nuevo.");
+    }
+    const t = nuevaTarjeta(cpe);
+    t.recibidoId = rec.id;
+    t.recibido = rec.recibido;
+    estado.tarjetas.push(t);
+    nuevas++;
+  }
+  if (nuevas) {
+    estado.recibidasNuevas = nuevas;
+    estado.resultado = null;
+  }
 }
 
 // ---------- cartas de porte ----------
@@ -171,11 +208,12 @@ function nuevaTarjeta(cpe) {
 }
 
 let reloj;
-function guardarTarjetas() {
+// Mientras se escribe, espera un poco para no grabar en cada tecla; después de guardar o descartar, al instante
+function guardarTarjetas({ ya = false } = {}) {
   clearTimeout(reloj);
-  reloj = setTimeout(() => {
-    store.guardar("tarjetas", estado.tarjetas.map(({ el, ...t }) => t)).catch(console.error);
-  }, 300);
+  const grabar = () => store.guardar("tarjetas", estado.tarjetas.map(({ el, ...t }) => t));
+  if (ya) return grabar();
+  reloj = setTimeout(() => grabar().catch(console.error), 300);
 }
 
 function alElegirPdfs(ev) {
@@ -228,6 +266,7 @@ function guardarEnExcel() {
     const r = await llamar(estado.conexion, "agregar", {
       filas: filasParaGuardar(),
       forzar: estado.tarjetas.filter((t) => t.forzar).map((t) => t.cpe.ctg),
+      recibidos: estado.tarjetas.map((t) => t.recibidoId).filter(Boolean),
       agregarColumnas: estado.agregarCols,
     });
     // El script siempre devuelve el Excel como quedó: así los duplicados nuevos se ven en las tarjetas
@@ -235,7 +274,8 @@ function guardarEnExcel() {
     if (!r.ok) throw new Error(r.error);
     estado.tarjetas = [];
     estado.resultado = r;
-    guardarTarjetas();
+    estado.recibidasNuevas = 0;
+    await guardarTarjetas({ ya: true });
     scrollTo({ top: 0, behavior: "smooth" });
   });
 }
@@ -316,6 +356,10 @@ function renderTarjetas() {
   const infos = analizarTarjetas();
   poner(zona,
     h("h2", {}, "Cartas de porte"),
+    estado.recibidasNuevas
+      ? h("p", { class: "aviso-recibidas" }, icono("ok"),
+        estado.recibidasNuevas === 1 ? "Llegó 1 carta desde WhatsApp: completá el lote." : `Llegaron ${estado.recibidasNuevas} cartas desde WhatsApp: completá los lotes.`)
+      : null,
     h("input", { type: "file", id: "input-pdf", class: "oculto-visual", accept: "application/pdf,.pdf", multiple: true, onchange: alElegirPdfs }),
     h("label", { for: "input-pdf", class: `boton grande ${estado.tarjetas.length ? "" : "primario"}` }, icono("mas"), "Agregar PDFs de CPE"),
     infos.map(renderTarjeta),
@@ -359,7 +403,21 @@ function renderTarjeta(info) {
     Object.keys(estado.libro.hojas).map((n) => h("option", { value: n }, n)));
   selectorHoja.value = t.hoja;
 
-  const quitar = () => { estado.tarjetas = estado.tarjetas.filter((x) => x !== t); render(); };
+  const sacar = () => { estado.tarjetas = estado.tarjetas.filter((x) => x !== t); };
+  const quitar = () => {
+    if (!t.recibidoId) {
+      sacar();
+      render();
+      return;
+    }
+    if (!confirm("Esta carta llegó por WhatsApp. ¿Descartarla? Se borra y no se carga en el Excel.")) return;
+    conEspera("Descartando…", async () => {
+      const r = await llamar(estado.conexion, "descartar", { id: t.recibidoId });
+      if (!r.ok) throw new Error(r.error);
+      sacar();
+      await guardarTarjetas({ ya: true });
+    });
+  };
   const restante = () => Math.max(0, (cpe.pesoNeto || 0) - t.lotes.reduce((s, l) => s + (l.kgs || 0), 0));
 
   t.el = {
@@ -372,6 +430,9 @@ function renderTarjeta(info) {
   t.el.tarjeta = h("article", { class: "tarjeta" },
     h("header", { class: "tarjeta-cabecera" },
       h("div", {},
+        t.recibidoId
+          ? h("p", { class: "etiqueta-whatsapp" }, "Llegó por WhatsApp" + (t.recibido ? ` · ${fmtMomento(Date.parse(t.recibido))}` : ""))
+          : null,
         h("h3", {}, `${cpe.grano || "?"} · ${fmtKg(cpe.pesoNeto)} kg`),
         h("p", { class: "ayuda" }, `CPE ${cpe.nroCpe || "?"} · CTG ${cpe.ctg || "?"} · ${fmtFecha(cpe.fecha)}`),
       ),

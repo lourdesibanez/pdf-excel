@@ -5,7 +5,10 @@
  * (nunca reemplaza el archivo). Un candado (LockService) hace que dos cargas al mismo
  * tiempo se escriban una debajo de la otra. Antes de escribir revisa que el CTG no esté cargado.
  *
- * Instalación: ver apps-script/LEEME.md
+ * También es la "bandeja de entrada" de los PDFs que llegan por WhatsApp desde el Atajo del
+ * iPhone: los guarda en una carpeta de Drive SOLO mientras esperan; al cargarlos o descartarlos se borran.
+ *
+ * Instalación: ver apps-script/LEEME.md y apps-script/ATAJO.md
  */
 
 // Nombre lógico -> textos posibles del encabezado (normalizados). Igual que pwa/js/libro.js
@@ -27,6 +30,9 @@ const ETIQUETAS = {
   patente: 'Patente', fecha: 'Fecha', transportista: 'Transportista', usuario: 'Cargado por',
 };
 const ESPERA_CANDADO_MS = 30000;
+const CARPETA_PENDIENTES = 'CPE pendientes (App CPE)';
+const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const MAX_RECIBIDAS = 50; // por consulta, para que la respuesta no sea enorme
 
 // ---------- web app ----------
 
@@ -50,12 +56,29 @@ function doPost(e) {
         agregarColumnas: !!pedido.agregarColumnas,
         usuario: usuario,
       });
+      // Los PDFs que llegaron por WhatsApp y ya quedaron cargados se borran: no se guarda nada
+      if (respuesta.ok && (pedido.recibidos || []).length) {
+        try {
+          borrarRecibidas_(pedido.recibidos, usuario);
+        } catch (err) {
+          respuesta.avisos.push('Se guardó, pero no pude borrar el PDF recibido: ' + ((err && err.message) || err));
+        }
+      }
+    } else if (pedido.accion === 'recibir') {
+      respuesta = recibirPdf_(pedido, usuario);
+    } else if (pedido.accion === 'pendientes') {
+      respuesta = { ok: true, recibidas: pendientes_(usuario) };
+    } else if (pedido.accion === 'descartar') {
+      borrarRecibidas_([pedido.id], usuario);
+      respuesta = { ok: true };
     } else {
       respuesta = { ok: false, error: 'Acción desconocida: ' + pedido.accion };
     }
   } catch (err) {
     respuesta = { ok: false, error: String((err && err.message) || err) };
   }
+  // El Atajo del iPhone muestra "mensaje" en la notificación
+  if (!respuesta.mensaje && respuesta.error) respuesta.mensaje = '⚠️ ' + respuesta.error;
   return ContentService.createTextOutput(JSON.stringify(respuesta)).setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -246,6 +269,83 @@ function fechaHoja_(iso) {
   return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12) : null;
 }
 
+// ---------- bandeja de PDFs recibidos por WhatsApp (Drive) ----------
+
+// Sala de espera de los PDFs (se crea la primera vez). Solo tiene lo que todavía no se cargó.
+function carpetaPendientes_() {
+  const props = PropertiesService.getScriptProperties();
+  const id = props.getProperty('CARPETA_PENDIENTES');
+  if (id) {
+    try {
+      const existente = DriveApp.getFolderById(id);
+      if (!existente.isTrashed()) return existente;
+    } catch (err) { /* la borraron: se vuelve a crear */ }
+  }
+  const nueva = DriveApp.createFolder(CARPETA_PENDIENTES);
+  props.setProperty('CARPETA_PENDIENTES', nueva.getId());
+  return nueva;
+}
+
+function descripcion_(archivo) {
+  try {
+    return JSON.parse(archivo.getDescription() || '{}');
+  } catch (err) {
+    return {};
+  }
+}
+
+function recibirPdf_(pedido, usuario) {
+  const base64 = String(pedido.pdf || '').replace(/\s/g, ''); // el Atajo puede mandarlo con saltos de línea
+  if (!base64) return { ok: false, error: 'No llegó ningún archivo.' };
+  let bytes;
+  try {
+    bytes = Utilities.base64Decode(base64);
+  } catch (err) {
+    return { ok: false, error: 'El archivo llegó dañado. Probá mandarlo de nuevo.' };
+  }
+  if (bytes.length > MAX_PDF_BYTES) return { ok: false, error: 'El archivo es demasiado grande para ser una CPE.' };
+  if (!(bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70)) { // "%PDF"
+    return { ok: false, error: 'Eso no es un PDF. Compartí el PDF de la carta de porte.' };
+  }
+  let nombre = String(pedido.nombre || 'CPE').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 120) || 'CPE';
+  if (!/\.pdf$/i.test(nombre)) nombre += '.pdf';
+  const archivo = carpetaPendientes_().createFile(Utilities.newBlob(bytes, 'application/pdf', usuario + ' - ' + nombre));
+  archivo.setDescription(JSON.stringify({ usuario: usuario, nombre: nombre, recibido: new Date().toISOString() }));
+  return { ok: true, mensaje: '✅ ' + nombre + ' recibida. Abrí la app CPE para completar el lote.' };
+}
+
+// PDFs pendientes de esta persona, con su contenido en base64 para que la app los lea
+function pendientes_(usuario) {
+  const lista = [];
+  const archivos = carpetaPendientes_().getFiles();
+  while (archivos.hasNext() && lista.length < MAX_RECIBIDAS) {
+    const archivo = archivos.next();
+    const datos = descripcion_(archivo);
+    if (datos.usuario !== usuario) continue;
+    lista.push({
+      id: archivo.getId(),
+      nombre: datos.nombre || archivo.getName(),
+      recibido: datos.recibido || null,
+      pdf: Utilities.base64Encode(archivo.getBlob().getBytes()),
+    });
+  }
+  return lista;
+}
+
+// Manda a la papelera de Drive (Google la vacía sola a los 30 días)
+function borrarRecibidas_(ids, usuario) {
+  ids.forEach(function (id) {
+    let archivo;
+    try {
+      archivo = DriveApp.getFileById(String(id));
+    } catch (err) {
+      return; // ya no existe: nada que mover
+    }
+    if (descripcion_(archivo).usuario !== usuario) throw new Error('Ese PDF no es tuyo.');
+    archivo.setTrashed(true);
+  });
+}
+
 // ---------- códigos de conexión (una clave por persona) ----------
 
 function leerClaves_() {
@@ -267,6 +367,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('App CPE')
     .addItem('1. Configurar', 'configurar')
     .addItem('2. Crear código para una persona', 'crearCodigo')
+    .addItem('3. Activar recepción por WhatsApp', 'activarWhatsapp')
     .addItem('Ver o dar de baja personas', 'verPersonas')
     .addToUi();
 }
@@ -310,18 +411,37 @@ function crearCodigo() {
   claves[clave] = nombre;
   guardarClaves_(claves);
 
-  const codigo = Utilities.base64EncodeWebSafe(JSON.stringify({ u: url, k: clave, n: nombre }), Utilities.Charset.UTF_8)
-    .replace(/=+$/, '');
+  // Base64 estándar (no la variante "web safe"): así el Atajo del iPhone lo decodifica con su acción de base64
+  const codigo = Utilities.base64Encode(JSON.stringify({ u: url, k: clave, n: nombre }), Utilities.Charset.UTF_8);
   const app = props.getProperty('URL_APP');
+  const atajo = props.getProperty('URL_ATAJO');
   const html = HtmlService.createHtmlOutput(
     '<div style="font:14px/1.4 sans-serif">' +
     '<p>Mandale este código a <b>' + escaparHtml_(nombre) + '</b> (por WhatsApp, por ejemplo). ' +
-    'En la app del celular: <b>Conectar</b> → pegar el código.</p>' +
+    'Es el mismo para la app (<b>Conectar</b> → pegar el código) y para el Atajo "Mandar a CPE".</p>' +
     '<textarea readonly onclick="this.select()" style="width:100%;height:110px;font:12px monospace">' + codigo + '</textarea>' +
     (app ? '<p>App: <a href="' + escaparHtml_(app) + '" target="_blank">' + escaparHtml_(app) + '</a></p>' : '') +
+    (atajo ? '<p>Atajo: <a href="' + escaparHtml_(atajo) + '" target="_blank">' + escaparHtml_(atajo) + '</a></p>' : '') +
     '<p style="color:#666">Si alguien pierde el celular, dalo de baja en "Ver o dar de baja personas".</p></div>'
-  ).setWidth(480).setHeight(330);
+  ).setWidth(480).setHeight(360);
   ui.showModalDialog(html, 'Código para ' + nombre);
+}
+
+// Crea las carpetas de Drive (la primera vez Google pide permiso para usar Drive) y guarda el link del Atajo
+function activarWhatsapp() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const carpeta = carpetaPendientes_();
+  const r = ui.prompt('Recepción por WhatsApp',
+    'Listo. Los PDFs que manden esperan en la carpeta "' + CARPETA_PENDIENTES + '" de tu Drive ' +
+    'solo hasta que se cargan o se descartan; después se borran.\n\n' +
+    'Si ya armaste el Atajo "Mandar a CPE", pegá acá su link de iCloud para que aparezca junto a cada código (opcional):',
+    ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() === ui.Button.OK && r.getResponseText().trim()) {
+    props.setProperty('URL_ATAJO', r.getResponseText().trim());
+  }
+  ui.alert('Carpeta: ' + carpeta.getUrl() + '\n\nAcordate de publicar una versión nueva del script ' +
+    '(Implementar → Administrar implementaciones → lápiz → Nueva versión).');
 }
 
 function verPersonas() {

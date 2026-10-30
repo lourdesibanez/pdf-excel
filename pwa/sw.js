@@ -1,7 +1,7 @@
 // Service worker: guarda la app en el teléfono para que funcione sin internet.
 // Estrategia: responde desde la caché y, si hay conexión, la actualiza en segundo plano
 // (una versión nueva publicada se ve en la siguiente apertura de la app).
-const CACHE = "cpe-a-excel-v2";
+const CACHE = "cpe-a-excel-v3";
 const ARCHIVOS = [
   "./",
   "./index.html",

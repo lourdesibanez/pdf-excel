@@ -4,13 +4,15 @@ const ESPERA_MS = 60_000;
 
 export class SinConexion extends Error {}
 
-// El código que genera el menú "App CPE" de la planilla: base64url de {u: url del script, k: clave, n: nombre}.
-// También acepta el link completo (…#conectar=CODIGO).
+// El código que genera el menú "App CPE" de la planilla: base64 de {u: url del script, k: clave, n: nombre}.
+// Acepta base64 estándar (códigos nuevos, que también lee el Atajo) y base64url (códigos viejos),
+// y también el link completo (…#conectar=CODIGO).
 export function leerCodigo(texto) {
   const crudo = String(texto || "").trim();
-  const codigo = (crudo.match(/conectar=([\w-]+)/)?.[1] || crudo).replace(/=+$/, "");
+  let codigo = crudo.match(/conectar=([^&\s]+)/)?.[1] || crudo;
+  try { codigo = decodeURIComponent(codigo); } catch { /* ya venía sin codificar */ }
   try {
-    const b64 = codigo.replace(/-/g, "+").replace(/_/g, "/");
+    const b64 = codigo.replace(/\s/g, "").replace(/=+$/, "").replace(/-/g, "+").replace(/_/g, "/");
     const binario = atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4));
     const datos = JSON.parse(new TextDecoder().decode(Uint8Array.from(binario, (c) => c.charCodeAt(0))));
     if (!/^https:\/\//.test(datos.u) || !datos.k) throw new Error();

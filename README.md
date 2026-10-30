@@ -17,6 +17,7 @@ App para el celular (iPhone y Android) que lee PDFs de **Cartas de Porte Electr�
 - El Excel vive en **Google Sheets**. La app nunca reemplaza el archivo: solo le pide al script de la planilla que agregue filas al final, con un candado para que dos cargas simultáneas no se pisen.
 - Antes de escribir, el script revisa si el CTG ya está cargado, también si lo cargó otra persona hace un minuto. En ese caso no escribe nada y avisa.
 - Cada persona se conecta con **su propio código**, sin cuenta de Google. Si la hoja tiene una columna **Cargado por**, ahí queda anotado quién cargó cada fila.
+- **Desde WhatsApp en dos toques** (opcional): con el Atajo de iPhone "Mandar a CPE" se comparte el PDF directo desde WhatsApp y aparece en la app esperando el lote. El PDF espera en el Drive del dueño de la planilla solo hasta que se carga o se descarta. Ver [apps-script/ATAJO.md](apps-script/ATAJO.md).
 
 ## Puesta en marcha
 
@@ -60,7 +61,8 @@ Otras opciones: arrastrar la carpeta `pwa/` a **Netlify Drop** (app.netlify.com/
 
 | Ruta | Qué hace |
 |---|---|
-| `apps-script/Codigo.gs` | Script de la hoja de Google: recibe las filas, controla duplicados y escribe con candado. Agrega el menú **App CPE** para crear y dar de baja códigos. |
+| `apps-script/Codigo.gs` | Script de la hoja de Google: recibe las filas, controla duplicados y escribe con candado. Agrega el menú **App CPE** para crear y dar de baja códigos. También es la bandeja de los PDFs que llegan por WhatsApp. |
+| `apps-script/ATAJO.md` | Cómo armar y repartir el Atajo de iPhone "Mandar a CPE". |
 | `pwa/js/extractor.js` | PDF → datos. Usa pdf.js para sacar el texto, lo rearma por líneas y aplica expresiones regulares. Corre en el teléfono. |
 | `pwa/js/libro.js` | Lo que la app sabe del Excel: hojas, CTG cargados, campos y lotes (para sugerir y avisar). |
 | `pwa/js/api.js` | Conexión con el script (código de conexión y llamadas). |

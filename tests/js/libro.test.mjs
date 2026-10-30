@@ -51,5 +51,10 @@ test("código de conexión: acepta el código o el link, con tildes", () => {
   assert.deepEqual(leerCodigo(codigo), esperado);
   assert.deepEqual(leerCodigo(`  ${codigo}==\n`), esperado);
   assert.deepEqual(leerCodigo(`https://x.github.io/cpe/#conectar=${codigo}`), esperado);
+  // Formato nuevo (base64 estándar, el que genera la planilla y lee el Atajo), con "+", "/" y "="
+  const estandar = Buffer.from(JSON.stringify({ ...datos, k: "a>b?c~" })).toString("base64");
+  assert.match(estandar, /[+/=]/);
+  assert.equal(leerCodigo(estandar).clave, "a>b?c~");
+  assert.equal(leerCodigo(`https://x.github.io/cpe/#conectar=${encodeURIComponent(estandar)}`).clave, "a>b?c~");
   assert.throws(() => leerCodigo("cualquier cosa"), /no es válido/);
 });

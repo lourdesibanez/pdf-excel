@@ -208,6 +208,24 @@ select {
 
 /* ---------- tarjetas ---------- */
 .tarjeta.con-problemas { border-color: var(--error); }
+.etiqueta-whatsapp {
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--acento);
+  margin-bottom: 4px;
+}
+.aviso-recibidas {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--acento-suave);
+  color: var(--tinta);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+}
+.aviso-recibidas .icono { color: var(--acento); }
 .tarjeta-cabecera { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
 
 .alerta, .aviso {

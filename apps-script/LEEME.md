@@ -36,6 +36,10 @@ Desde ahora, esta hoja de Google es "el Excel". Lo ves y editás desde el navega
 
 Si alguien pierde el celular o deja de cargar: **App CPE → Ver o dar de baja personas**.
 
+## 5. (Opcional) Mandar las cartas directo desde WhatsApp
+
+Para que José y Juan no tengan que guardar el PDF en Archivos, seguí [ATAJO.md](ATAJO.md): **App CPE → 3. Activar recepción por WhatsApp** y armar el Atajo "Mandar a CPE" en el iPhone.
+
 ## Si cambiás el script más adelante
 
 **Implementar → Administrar implementaciones → lápiz → Versión: Nueva versión → Implementar.** Así se mantiene la misma URL y no hay que volver a mandar los códigos. Si en cambio hacés una *nueva implementación*, la URL cambia y hay que generar códigos nuevos.
