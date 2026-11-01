@@ -38,7 +38,7 @@ Si alguien pierde el celular o deja de cargar: **App CPE → Ver o dar de baja p
 
 ## 5. (Opcional) Mandar las cartas directo desde WhatsApp
 
-Para que José y Juan no tengan que guardar el PDF en Archivos, seguí [ATAJO.md](ATAJO.md): **App CPE → 3. Activar recepción por WhatsApp** y armar el Atajo "Mandar a CPE" en el iPhone.
+Para que José y Juan no tengan que guardar el PDF en Archivos, seguí [ATAJO.md](ATAJO.md): **App CPE → 3. Activar recepción por WhatsApp** y armar el Atajo "Mandar a APP-CPE" en el iPhone.
 
 ## Si cambiás el script más adelante
 
